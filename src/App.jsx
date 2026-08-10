@@ -125,7 +125,7 @@ export default function App() {
     logSession(focusSeconds, breakType);
 
     setTimeout(() => {
-      soundEngine.startBreakSoundscape();
+      soundEngine.startBreakSoundscape(breakType);
       setIsPlaying(true);
     }, 500);
 

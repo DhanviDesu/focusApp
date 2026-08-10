@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Coffee, Wind, Compass, Sparkles } from 'lucide-react';
+import React, { useState } from 'react';
+import { Coffee, Wind, Sparkles, Disc } from 'lucide-react';
 import { soundEngine } from '../audio/SoundEngine';
 
 export default function FocusView({ 
@@ -8,17 +8,18 @@ export default function FocusView({
   onStartBreak, 
   onToggleAudio 
 }) {
-  const [selectedPreset, setSelectedPreset] = useState('alpha');
+  const [selectedPreset, setSelectedPreset] = useState('focus_section_1.m4a');
 
   const presets = [
-    { id: 'alpha', name: 'Alpha 10Hz Focus', freq: 10, desc: 'Binaural flow state wave' },
-    { id: 'gamma', name: 'Gamma 40Hz Cognition', freq: 40, desc: 'High cognitive intensity' },
-    { id: 'theta', name: 'Theta 6Hz Deep Creative', freq: 6, desc: 'Relaxed problem solving' }
+    { id: 'focus_section_1.m4a', name: '🎵 Focus Section 1', desc: 'Focus Block 1' },
+    { id: 'focus_section_2.m4a', name: '🎵 Focus Section 2', desc: 'Focus Block 2' },
+    { id: 'focus_section_3.m4a', name: '🎵 Focus Section 3', desc: 'Focus Block 3' },
+    { id: 'binaural', name: '✨ Alpha 10Hz Binaural', desc: 'Binaural flow wave synth' }
   ];
 
-  const handleSelectPreset = (preset) => {
-    setSelectedPreset(preset.id);
-    soundEngine.setBinauralFreq(preset.freq);
+  const handleSelectPreset = (p) => {
+    setSelectedPreset(p.id);
+    soundEngine.setFocusTrack(p.id);
   };
 
   const formatTime = (totalSec) => {
@@ -40,8 +41,8 @@ export default function FocusView({
         <div className="flow-timer-label">Indefinite Flow State</div>
       </div>
 
-      <div style={{ maxWidth: '440px', color: 'var(--text-muted)', fontSize: '14px', lineHeight: '1.5' }}>
-        No voice interruptions or timed cut-offs. Focus for as long as you are in flow. Press your global shortcut whenever you need a break.
+      <div style={{ maxWidth: '520px', color: 'var(--text-muted)', fontSize: '14px', lineHeight: '1.5' }}>
+        Focus music playing on an indefinite loop without speech interruptions. Press your shortcut when you need a break.
       </div>
 
       <div className="soundscape-selector">
@@ -51,7 +52,11 @@ export default function FocusView({
             className={`preset-chip ${selectedPreset === p.id ? 'active' : ''}`}
             onClick={() => handleSelectPreset(p)}
           >
-            <Sparkles size={14} style={{ display: 'inline', marginRight: '6px' }} />
+            {p.id.startsWith('focus') ? (
+              <Disc size={14} style={{ display: 'inline', marginRight: '6px' }} />
+            ) : (
+              <Sparkles size={14} style={{ display: 'inline', marginRight: '6px' }} />
+            )}
             {p.name}
           </button>
         ))}
