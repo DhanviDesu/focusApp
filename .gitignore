@@ -4,3 +4,5 @@ dist-electron
 .DS_Store
 *.log
 public/audio/focus_music.mp4
+public/audio/*_orig.m4a
+public/audio/*.json

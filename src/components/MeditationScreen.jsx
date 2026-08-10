@@ -1,23 +1,39 @@
 import React, { useState, useEffect } from 'react';
 import { Wind, CheckCircle, Clock } from 'lucide-react';
+import { soundEngine } from '../audio/SoundEngine';
 
 export default function MeditationScreen({ onEndBreak }) {
   const [phase, setPhase] = useState('Inhale'); // Inhale | Hold | Exhale | Rest
   const [phaseSeconds, setPhaseSeconds] = useState(4);
-  const [totalBreakSec, setTotalBreakSec] = useState(0);
+  const [remainingSec, setRemainingSec] = useState(483);
+  const [currentTimeSec, setCurrentTimeSec] = useState(0);
+  const [durationSec, setDurationSec] = useState(483);
+  const [isScrubbing, setIsScrubbing] = useState(false);
 
+  // Sync remaining break audio time
   useEffect(() => {
-    const totalTimer = setInterval(() => {
-      setTotalBreakSec(prev => prev + 1);
-    }, 1000);
-    return () => clearInterval(totalTimer);
-  }, []);
+    const timer = setInterval(() => {
+      if (!isScrubbing) {
+        const info = soundEngine.getBreakRemainingTime('meditate');
+        if (info && info.durationSec > 0) {
+          setRemainingSec(info.remainingSec);
+          setDurationSec(info.durationSec);
+          setCurrentTimeSec(info.currentTimeSec);
+          if (info.remainingSec <= 0) {
+            onEndBreak();
+          }
+        }
+      }
+    }, 400);
 
+    return () => clearInterval(timer);
+  }, [onEndBreak, isScrubbing]);
+
+  // Box breathing phase timer
   useEffect(() => {
     const phaseTimer = setInterval(() => {
       setPhaseSeconds(prev => {
         if (prev <= 1) {
-          // Advance phase
           if (phase === 'Inhale') { setPhase('Hold'); return 4; }
           if (phase === 'Hold') { setPhase('Exhale'); return 4; }
           if (phase === 'Exhale') { setPhase('Rest'); return 4; }
@@ -29,6 +45,12 @@ export default function MeditationScreen({ onEndBreak }) {
 
     return () => clearInterval(phaseTimer);
   }, [phase]);
+
+  const handleSeek = (e) => {
+    const newTime = parseFloat(e.target.value);
+    setCurrentTimeSec(newTime);
+    soundEngine.seekBreakAudio('meditate', newTime);
+  };
 
   const getScale = () => {
     if (phase === 'Inhale') return 1.25;
@@ -50,9 +72,23 @@ export default function MeditationScreen({ onEndBreak }) {
         <span>Guided Breathing Meditation</span>
       </div>
 
-      <div style={{ fontSize: '14px', color: 'var(--accent-emerald)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <Clock size={16} />
-        <span>Meditation Time: {formatTime(totalBreakSec)}</span>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', width: '100%', maxWidth: '420px' }}>
+        <div style={{ fontSize: '14px', color: 'var(--accent-emerald)', display: 'flex', justifyContent: 'space-between', width: '100%', fontWeight: '600' }}>
+          <span>Elapsed: {formatTime(currentTimeSec)}</span>
+          <span>Remaining: {formatTime(remainingSec)}</span>
+        </div>
+        
+        <input 
+          type="range" 
+          min="0" 
+          max={durationSec || 483} 
+          value={currentTimeSec} 
+          onMouseDown={() => setIsScrubbing(true)}
+          onMouseUp={() => setIsScrubbing(false)}
+          onChange={handleSeek}
+          style={{ width: '100%', accentColor: 'var(--accent-emerald)', cursor: 'pointer' }}
+          title="Drag slider to skip to any point in the meditation session"
+        />
       </div>
 
       <div 
@@ -63,8 +99,8 @@ export default function MeditationScreen({ onEndBreak }) {
         <div className="breathing-timer-text">{phaseSeconds}s</div>
       </div>
 
-      <div style={{ textAlign: 'center', maxWidth: '460px', color: 'var(--text-muted)', fontSize: '15px' }}>
-        Follow the ring rhythm. Box Breathing resets nervous system tension and restores clarity.
+      <div style={{ textAlign: 'center', maxWidth: '460px', color: 'var(--text-muted)', fontSize: '14px' }}>
+        Drag the slider anytime to skip forward or backward in your meditation session.
       </div>
 
       <button className="btn-primary" onClick={onEndBreak} style={{ background: 'linear-gradient(135deg, #00b09b, #96c93d)', color: '#050b14' }}>

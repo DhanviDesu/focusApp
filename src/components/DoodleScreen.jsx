@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Palette, RefreshCw, CheckCircle, Clock, Sparkles, Volume2 } from 'lucide-react';
+import { Palette, RefreshCw, CheckCircle, Clock } from 'lucide-react';
+import { soundEngine } from '../audio/SoundEngine';
 
 const DOODLE_PROMPTS = [
   {
@@ -26,14 +27,34 @@ const DOODLE_PROMPTS = [
 
 export default function DoodleScreen({ onEndBreak }) {
   const [promptIdx, setPromptIdx] = useState(0);
-  const [breakSeconds, setBreakSeconds] = useState(0);
+  const [remainingSec, setRemainingSec] = useState(461);
+  const [currentTimeSec, setCurrentTimeSec] = useState(0);
+  const [durationSec, setDurationSec] = useState(461);
+  const [isScrubbing, setIsScrubbing] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => {
-      setBreakSeconds(prev => prev + 1);
-    }, 1000);
+      if (!isScrubbing) {
+        const info = soundEngine.getBreakRemainingTime('doodle');
+        if (info && info.durationSec > 0) {
+          setRemainingSec(info.remainingSec);
+          setDurationSec(info.durationSec);
+          setCurrentTimeSec(info.currentTimeSec);
+          if (info.remainingSec <= 0) {
+            onEndBreak();
+          }
+        }
+      }
+    }, 400);
+
     return () => clearInterval(timer);
-  }, []);
+  }, [onEndBreak, isScrubbing]);
+
+  const handleSeek = (e) => {
+    const newTime = parseFloat(e.target.value);
+    setCurrentTimeSec(newTime);
+    soundEngine.seekBreakAudio('doodle', newTime);
+  };
 
   const nextPrompt = () => {
     setPromptIdx((prev) => (prev + 1) % DOODLE_PROMPTS.length);
@@ -54,9 +75,23 @@ export default function DoodleScreen({ onEndBreak }) {
         <span>iPad Doodle & Rest Time</span>
       </div>
 
-      <div style={{ fontSize: '14px', color: '#a5f3fc', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <Clock size={16} />
-        <span>Break Duration: {formatTime(breakSeconds)}</span>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', width: '100%', maxWidth: '420px' }}>
+        <div style={{ fontSize: '14px', color: '#a5f3fc', display: 'flex', justifyContent: 'space-between', width: '100%', fontWeight: '600' }}>
+          <span>Elapsed: {formatTime(currentTimeSec)}</span>
+          <span>Remaining: {formatTime(remainingSec)}</span>
+        </div>
+        
+        <input 
+          type="range" 
+          min="0" 
+          max={durationSec || 461} 
+          value={currentTimeSec} 
+          onMouseDown={() => setIsScrubbing(true)}
+          onMouseUp={() => setIsScrubbing(false)}
+          onChange={handleSeek}
+          style={{ width: '100%', accentColor: 'var(--accent-amber)', cursor: 'pointer' }}
+          title="Drag slider to skip to any point in the doodling session"
+        />
       </div>
 
       <div className="doodle-prompt-card">
@@ -81,7 +116,7 @@ export default function DoodleScreen({ onEndBreak }) {
       </div>
 
       <div style={{ color: 'var(--text-dim)', fontSize: '13px', textAlign: 'center' }}>
-        Grab your iPad & Apple Pencil. Rest your eyes and let your hands doodle freely.
+        Drag the slider anytime to skip forward or backward in your doodling session.
       </div>
     </div>
   );

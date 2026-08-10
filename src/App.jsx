@@ -18,6 +18,13 @@ export default function App() {
   const [showStats, setShowStats] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
+  // Auto-return to focus mode when break audio completes
+  useEffect(() => {
+    soundEngine.onBreakEnded = (breakType) => {
+      handleEndBreak();
+    };
+  }, []);
+
   // Focus Timer
   useEffect(() => {
     let timer = null;

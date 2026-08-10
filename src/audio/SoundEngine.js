@@ -8,17 +8,27 @@ class SoundEngine {
     this.currentMode = 'focus'; // 'focus' | 'doodle' | 'meditate' | 'off'
     this.selectedFocusTrack = 'focus_section_1.m4a';
 
-    // HTML5 Audio elements for focus & guided break tracks
+    // Callback when break audio finishes playing naturally
+    this.onBreakEnded = null;
+
+    // HTML5 Audio elements
     this.focusAudio = new Audio('./audio/focus_section_1.m4a');
     this.focusAudio.loop = true;
 
     this.doodleAudio = new Audio('./audio/guided_doodle.m4a');
-    this.doodleAudio.loop = true;
+    this.doodleAudio.loop = false;
 
     this.meditationAudio = new Audio('./audio/guided_meditation.m4a');
-    this.meditationAudio.loop = true;
+    this.meditationAudio.loop = false;
 
-    // Layer gains for Binaural Beats fallback/layering
+    this.doodleAudio.onended = () => {
+      if (this.onBreakEnded) this.onBreakEnded('doodle');
+    };
+    this.meditationAudio.onended = () => {
+      if (this.onBreakEnded) this.onBreakEnded('meditate');
+    };
+
+    // Layer gains
     this.binauralGain = null;
     this.noiseGain = null;
     this.synthGain = null;
@@ -53,30 +63,53 @@ class SoundEngine {
     this.initContext();
     const now = this.ctx.currentTime;
 
-    const osc1 = this.ctx.createOscillator();
-    const osc2 = this.ctx.createOscillator();
-    const chimeGain = this.ctx.createGain();
+    // --- Soft Acoustic & Tactile Wooden Kalimba Pluck ---
+    
+    // 1. Tactile Pluck Impulse (Finger strike click)
+    const clickBuffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.005, this.ctx.sampleRate);
+    const clickData = clickBuffer.getChannelData(0);
+    for (let i = 0; i < clickData.length; i++) {
+      clickData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.001));
+    }
+    const clickSource = this.ctx.createBufferSource();
+    clickSource.buffer = clickBuffer;
+    const clickFilter = this.ctx.createBiquadFilter();
+    clickFilter.type = 'highpass';
+    clickFilter.frequency.setValueAtTime(1500, now);
+    const clickGain = this.ctx.createGain();
+    clickGain.gain.setValueAtTime(0.04 * this.volumes.master, now);
+    clickSource.connect(clickFilter);
+    clickFilter.connect(clickGain);
+    clickGain.connect(this.masterGain);
+    clickSource.start(now);
 
-    osc1.type = 'sine';
-    osc1.frequency.setValueAtTime(528, now);
-    osc1.frequency.exponentialRampToValueAtTime(524, now + 3);
+    // 2. Plucked Wooden Tine (Fundamental + Harmonics)
+    // Warm E4 (329.6 Hz) & B4 (493.9 Hz) dual tactile pluck
+    const freqs = [329.63, 493.88];
+    freqs.forEach((freq, idx) => {
+      const toneOsc = this.ctx.createOscillator();
+      const toneGain = this.ctx.createGain();
+      const toneFilter = this.ctx.createBiquadFilter();
 
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(1056, now);
-    osc2.frequency.exponentialRampToValueAtTime(1048, now + 3);
+      toneOsc.type = 'sine';
+      // Subtle pitch bend downward simulating finger tension release on a wooden tine
+      toneOsc.frequency.setValueAtTime(freq + 4, now);
+      toneOsc.frequency.exponentialRampToValueAtTime(freq, now + 0.04);
 
-    chimeGain.gain.setValueAtTime(0.01, now);
-    chimeGain.gain.exponentialRampToValueAtTime(0.6, now + 0.05);
-    chimeGain.gain.exponentialRampToValueAtTime(0.001, now + 4);
+      toneFilter.type = 'lowpass';
+      toneFilter.frequency.setValueAtTime(1800 - idx * 400, now);
 
-    osc1.connect(chimeGain);
-    osc2.connect(chimeGain);
-    chimeGain.connect(this.masterGain);
+      toneGain.gain.setValueAtTime(0.001, now);
+      toneGain.gain.linearRampToValueAtTime(0.09 * this.volumes.master / (idx + 1), now + 0.006);
+      toneGain.gain.exponentialRampToValueAtTime(0.0001, now + 1.8 - idx * 0.3);
 
-    osc1.start(now);
-    osc2.start(now);
-    osc1.stop(now + 4);
-    osc2.stop(now + 4);
+      toneOsc.connect(toneFilter);
+      toneFilter.connect(toneGain);
+      toneGain.connect(this.masterGain);
+
+      toneOsc.start(now);
+      toneOsc.stop(now + 2.0);
+    });
   }
 
   setFocusTrack(trackFilename) {
@@ -98,13 +131,10 @@ class SoundEngine {
 
     if (this.selectedFocusTrack !== 'binaural') {
       this.focusAudio.volume = this.volumes.master;
-      this.focusAudio.play().catch(err => {
-        console.warn("Focus audio play deferred:", err);
-      });
+      this.focusAudio.play().catch(err => console.warn("Focus audio play deferred:", err));
       return;
     }
 
-    // Binaural Beats fallback
     const now = this.ctx.currentTime;
     this.binauralGain = this.ctx.createGain();
     this.binauralGain.gain.setValueAtTime(0.001, now);
@@ -146,6 +176,27 @@ class SoundEngine {
       this.meditationAudio.volume = this.volumes.master;
       this.meditationAudio.currentTime = 0;
       this.meditationAudio.play().catch(err => console.warn("Meditation audio deferred:", err));
+    }
+  }
+
+  getBreakRemainingTime(breakType) {
+    const audio = breakType === 'doodle' ? this.doodleAudio : this.meditationAudio;
+    if (!audio || !audio.duration || isNaN(audio.duration)) {
+      return { remainingSec: 0, durationSec: 0, currentTimeSec: 0, progress: 0 };
+    }
+
+    const currentTimeSec = Math.floor(audio.currentTime);
+    const durationSec = Math.ceil(audio.duration);
+    const remainingSec = Math.max(0, Math.ceil(audio.duration - audio.currentTime));
+    const progress = Math.min(1, audio.currentTime / audio.duration);
+
+    return { remainingSec, durationSec, currentTimeSec, progress };
+  }
+
+  seekBreakAudio(breakType, timeInSeconds) {
+    const audio = breakType === 'doodle' ? this.doodleAudio : this.meditationAudio;
+    if (audio && !isNaN(audio.duration)) {
+      audio.currentTime = Math.max(0, Math.min(timeInSeconds, audio.duration));
     }
   }
 
