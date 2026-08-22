@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Coffee, Wind, Sparkles, Disc } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Coffee, Wind, Sparkles, Disc, Music, Shuffle, SkipForward } from 'lucide-react';
 import { soundEngine } from '../audio/SoundEngine';
 
 export default function FocusView({ 
@@ -9,17 +9,29 @@ export default function FocusView({
   onToggleAudio 
 }) {
   const [selectedPreset, setSelectedPreset] = useState('focus_section_1.m4a');
+  const [trackInfo, setTrackInfo] = useState({ title: '', artist: '' });
+
+  useEffect(() => {
+    soundEngine.onTrackChange = (info) => {
+      setTrackInfo(info);
+    };
+  }, []);
 
   const presets = [
     { id: 'focus_section_1.m4a', name: '🎵 Focus Section 1', desc: 'Focus Block 1' },
     { id: 'focus_section_2.m4a', name: '🎵 Focus Section 2', desc: 'Focus Block 2' },
     { id: 'focus_section_3.m4a', name: '🎵 Focus Section 3', desc: 'Focus Block 3' },
+    { id: 'spotify_shuffle', name: '🔀 Spotify Shuffle (30 Songs)', desc: 'Random shuffle of your 30-track focus playlist' },
     { id: 'binaural', name: '✨ Alpha 10Hz Binaural', desc: 'Binaural flow wave synth' }
   ];
 
   const handleSelectPreset = (p) => {
     setSelectedPreset(p.id);
     soundEngine.setFocusTrack(p.id);
+  };
+
+  const handleSkipTrack = () => {
+    soundEngine.playNextSpotifyTrack();
   };
 
   const formatTime = (totalSec) => {
@@ -52,7 +64,9 @@ export default function FocusView({
             className={`preset-chip ${selectedPreset === p.id ? 'active' : ''}`}
             onClick={() => handleSelectPreset(p)}
           >
-            {p.id.startsWith('focus') ? (
+            {p.id === 'spotify_shuffle' ? (
+              <Shuffle size={14} style={{ display: 'inline', marginRight: '6px', color: 'var(--accent-emerald)' }} />
+            ) : p.id.startsWith('focus') ? (
               <Disc size={14} style={{ display: 'inline', marginRight: '6px' }} />
             ) : (
               <Sparkles size={14} style={{ display: 'inline', marginRight: '6px' }} />
@@ -61,6 +75,41 @@ export default function FocusView({
           </button>
         ))}
       </div>
+
+      {selectedPreset === 'spotify_shuffle' && (
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '12px', 
+          background: 'rgba(0, 176, 155, 0.1)', 
+          border: '1px solid rgba(0, 176, 155, 0.25)', 
+          padding: '8px 16px', 
+          borderRadius: '20px',
+          color: 'var(--accent-emerald)',
+          fontSize: '13px',
+          fontWeight: '600'
+        }}>
+          <Music size={15} />
+          <span>
+            Now Playing: {trackInfo.title ? `${trackInfo.title} — ${trackInfo.artist}` : 'Loading Track...'}
+          </span>
+          <button 
+            onClick={handleSkipTrack} 
+            title="Skip to next shuffled track"
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              color: 'var(--accent-emerald)', 
+              cursor: 'pointer', 
+              display: 'flex', 
+              alignItems: 'center', 
+              padding: '2px 4px' 
+            }}
+          >
+            <SkipForward size={16} />
+          </button>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
         <button className="btn-primary" onClick={() => onStartBreak('doodle')}>

@@ -4,5 +4,7 @@ dist-electron
 .DS_Store
 *.log
 public/audio/focus_music.mp4
+public/audio/spotify_focus_mix.m4a
 public/audio/*_orig.m4a
 public/audio/*.json
+public/audio/spotify_playlist/concat_list.txt

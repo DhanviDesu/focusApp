@@ -1,5 +1,38 @@
 // Web Audio API & Audio Section Manager
 
+export const SPOTIFY_TRACKS = [
+  { file: 'track_01.m4a', title: 'Attention (Violin)', artist: 'Dramatica' },
+  { file: 'track_02.m4a', title: 'Dandelions (Violin)', artist: 'Dramatica' },
+  { file: 'track_03.m4a', title: 'Fairytale (Violin)', artist: 'Dramatica' },
+  { file: 'track_04.m4a', title: 'First Sight', artist: 'Joel Sunny' },
+  { file: 'track_05.m4a', title: 'Into the Woods', artist: 'Joel Sunny' },
+  { file: 'track_06.m4a', title: 'Love Nwantiti (Violin)', artist: 'Dramatica' },
+  { file: 'track_07.m4a', title: 'Luminary', artist: 'Joel Sunny' },
+  { file: 'track_08.m4a', title: 'Middle Of The Night (Violin)', artist: 'Joel Sunny, Dramatica' },
+  { file: 'track_09.m4a', title: 'Play Date (Violin)', artist: 'Dramatica' },
+  { file: 'track_10.m4a', title: 'Runaway (Violin)', artist: 'Dramatica' },
+  { file: 'track_11.m4a', title: 'Running Up That Hill (Violin)', artist: 'Dramatica' },
+  { file: 'track_12.m4a', title: 'Say It Right (Violin)', artist: 'Dramatica' },
+  { file: 'track_13.m4a', title: 'Slow Dancing In The Dark (Violin)', artist: 'Dramatica' },
+  { file: 'track_14.m4a', title: 'Streets (Violin)', artist: 'Dramatica' },
+  { file: 'track_15.m4a', title: 'Sweater Weather (Violin)', artist: 'Dramatica' },
+  { file: 'track_16.m4a', title: 'Train Wreck (Violin)', artist: 'Dramatica' },
+  { file: 'track_17.m4a', title: "Why'd You Only Call Me When You're High (Violin)", artist: 'Dramatica' },
+  { file: 'track_18.m4a', title: 'Young and Beautiful (Violin)', artist: 'Dramatica' },
+  { file: 'track_19.m4a', title: 'With Love Comes Loss (Piano Solo)', artist: 'John Powell, Batu Sener' },
+  { file: 'track_20.m4a', title: 'Time (Inception Piano)', artist: 'Random Piano' },
+  { file: 'track_21.m4a', title: 'Into The West', artist: 'Jamie Duffy' },
+  { file: 'track_22.m4a', title: 'Breathing', artist: 'Jamie Duffy' },
+  { file: 'track_23.m4a', title: 'Solas', artist: 'Jamie Duffy' },
+  { file: 'track_24.m4a', title: "Valzer D'amore", artist: 'Jason Fervento' },
+  { file: 'track_25.m4a', title: 'Hijo De La Luna (Orchestra)', artist: '2dypoy' },
+  { file: 'track_26.m4a', title: 'Dawn of Faith', artist: 'Eternal Eclipse' },
+  { file: 'track_27.m4a', title: 'Idea 12', artist: 'Gibran Alcocer' },
+  { file: 'track_28.m4a', title: 'Idea 25', artist: 'Gibran Alcocer, Andrea Vanzo' },
+  { file: 'track_29.m4a', title: 'November', artist: 'TWO LANES' },
+  { file: 'track_30.m4a', title: 'Dance For Me Wallis', artist: 'Abel Korzeniowski' }
+];
+
 class SoundEngine {
   constructor() {
     this.ctx = null;
@@ -7,6 +40,12 @@ class SoundEngine {
     this.isPlaying = false;
     this.currentMode = 'focus'; // 'focus' | 'doodle' | 'meditate' | 'off'
     this.selectedFocusTrack = 'focus_section_1.m4a';
+
+    // Playlist Shuffle State
+    this.playlistQueue = [];
+    this.playlistIndex = 0;
+    this.currentTrackInfo = { title: '', artist: '' };
+    this.onTrackChange = null;
 
     // Callback when break audio finishes playing naturally
     this.onBreakEnded = null;
@@ -21,6 +60,13 @@ class SoundEngine {
     this.meditationAudio = new Audio('./audio/guided_meditation.m4a');
     this.meditationAudio.loop = false;
 
+    // Spotify track end listener -> play next track in shuffled queue
+    this.focusAudio.onended = () => {
+      if (this.currentMode === 'focus' && this.selectedFocusTrack === 'spotify_shuffle') {
+        this.playNextSpotifyTrack();
+      }
+    };
+
     this.doodleAudio.onended = () => {
       if (this.onBreakEnded) this.onBreakEnded('doodle');
     };
@@ -31,7 +77,6 @@ class SoundEngine {
     // Layer gains
     this.binauralGain = null;
     this.noiseGain = null;
-    this.synthGain = null;
 
     // Volume states (0 to 1)
     this.volumes = {
@@ -63,9 +108,7 @@ class SoundEngine {
     this.initContext();
     const now = this.ctx.currentTime;
 
-    // --- Soft Acoustic & Tactile Wooden Kalimba Pluck ---
-    
-    // 1. Tactile Pluck Impulse (Finger strike click)
+    // Soft Acoustic & Tactile Wooden Kalimba Pluck
     const clickBuffer = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.005, this.ctx.sampleRate);
     const clickData = clickBuffer.getChannelData(0);
     for (let i = 0; i < clickData.length; i++) {
@@ -83,8 +126,6 @@ class SoundEngine {
     clickGain.connect(this.masterGain);
     clickSource.start(now);
 
-    // 2. Plucked Wooden Tine (Fundamental + Harmonics)
-    // Warm E4 (329.6 Hz) & B4 (493.9 Hz) dual tactile pluck
     const freqs = [329.63, 493.88];
     freqs.forEach((freq, idx) => {
       const toneOsc = this.ctx.createOscillator();
@@ -92,7 +133,6 @@ class SoundEngine {
       const toneFilter = this.ctx.createBiquadFilter();
 
       toneOsc.type = 'sine';
-      // Subtle pitch bend downward simulating finger tension release on a wooden tine
       toneOsc.frequency.setValueAtTime(freq + 4, now);
       toneOsc.frequency.exponentialRampToValueAtTime(freq, now + 0.04);
 
@@ -112,8 +152,28 @@ class SoundEngine {
     });
   }
 
+  // Shuffle playlist tracks using Fisher-Yates algorithm
+  shuffleSpotifyQueue() {
+    const queue = [...SPOTIFY_TRACKS];
+    for (let i = queue.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [queue[i], queue[j]] = [queue[j], queue[i]];
+    }
+    this.playlistQueue = queue;
+    this.playlistIndex = 0;
+  }
+
   setFocusTrack(trackFilename) {
     this.selectedFocusTrack = trackFilename;
+
+    if (trackFilename === 'spotify_shuffle') {
+      this.focusAudio.loop = false;
+      this.shuffleSpotifyQueue();
+      this.playCurrentSpotifyTrack();
+      return;
+    }
+
+    this.focusAudio.loop = true;
     if (trackFilename !== 'binaural') {
       this.focusAudio.src = `./audio/${trackFilename}`;
     }
@@ -122,12 +182,43 @@ class SoundEngine {
     }
   }
 
+  playCurrentSpotifyTrack() {
+    if (this.playlistQueue.length === 0) {
+      this.shuffleSpotifyQueue();
+    }
+    const currentTrack = this.playlistQueue[this.playlistIndex];
+    this.currentTrackInfo = { title: currentTrack.title, artist: currentTrack.artist };
+    if (this.onTrackChange) this.onTrackChange(this.currentTrackInfo);
+
+    this.focusAudio.src = `./audio/spotify_playlist/${currentTrack.file}`;
+    if (this.isPlaying && this.currentMode === 'focus') {
+      this.focusAudio.volume = this.volumes.master;
+      this.focusAudio.play().catch(err => console.warn("Spotify audio deferred:", err));
+    }
+  }
+
+  playNextSpotifyTrack() {
+    this.playlistIndex = (this.playlistIndex + 1) % this.playlistQueue.length;
+    if (this.playlistIndex === 0) {
+      this.shuffleSpotifyQueue();
+    }
+    this.playCurrentSpotifyTrack();
+  }
+
   startFocusSoundscape() {
     this.initContext();
     this.stopAll();
 
     this.currentMode = 'focus';
     this.isPlaying = true;
+
+    if (this.selectedFocusTrack === 'spotify_shuffle') {
+      if (this.playlistQueue.length === 0) {
+        this.shuffleSpotifyQueue();
+      }
+      this.playCurrentSpotifyTrack();
+      return;
+    }
 
     if (this.selectedFocusTrack !== 'binaural') {
       this.focusAudio.volume = this.volumes.master;
