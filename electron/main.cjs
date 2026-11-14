@@ -3,7 +3,7 @@ const path = require('path');
 
 let mainWindow = null;
 let hotkeys = {
-  doodleHotkey: 'Option+Space',
+  doodleHotkey: 'Control+Shift+D',
   meditationHotkey: 'Option+M',
   pauseHotkey: 'Option+P'
 };
@@ -45,34 +45,25 @@ function createWindow() {
 function registerGlobalHotkeys() {
   globalShortcut.unregisterAll();
 
-  // 1. Doodle Break Hotkey
-  try {
-    const regDoodle = globalShortcut.register(hotkeys.doodleHotkey, () => {
-      handleGlobalBreakTrigger('doodle');
-    });
-    console.log(`Registered Doodle hotkey (${hotkeys.doodleHotkey}): ${regDoodle}`);
-  } catch (err) {
-    console.error('Failed to register Doodle hotkey:', err);
+  const handlers = {
+    doodleHotkey: () => handleGlobalBreakTrigger('doodle'),
+    meditationHotkey: () => handleGlobalBreakTrigger('meditate'),
+    pauseHotkey: () => handleGlobalPauseTrigger()
+  };
+
+  // true = registered, false = another app already owns this shortcut
+  const status = {};
+  for (const [key, handler] of Object.entries(handlers)) {
+    try {
+      status[key] = globalShortcut.register(hotkeys[key], handler);
+    } catch (err) {
+      status[key] = false;
+    }
+    console.log(`Registered ${key} (${hotkeys[key]}): ${status[key]}`);
   }
 
-  // 2. Meditation Break Hotkey
-  try {
-    const regMeditation = globalShortcut.register(hotkeys.meditationHotkey, () => {
-      handleGlobalBreakTrigger('meditate');
-    });
-    console.log(`Registered Meditation hotkey (${hotkeys.meditationHotkey}): ${regMeditation}`);
-  } catch (err) {
-    console.error('Failed to register Meditation hotkey:', err);
-  }
-
-  // 3. Pause / Play Toggle Hotkey
-  try {
-    const regPause = globalShortcut.register(hotkeys.pauseHotkey, () => {
-      handleGlobalPauseTrigger();
-    });
-    console.log(`Registered Pause hotkey (${hotkeys.pauseHotkey}): ${regPause}`);
-  } catch (err) {
-    console.error('Failed to register Pause hotkey:', err);
+  if (mainWindow) {
+    mainWindow.webContents.send('hotkey-status', status);
   }
 }
 
@@ -108,6 +99,19 @@ ipcMain.on('update-global-hotkeys', (_event, newHotkeys) => {
 
 ipcMain.on('bring-to-front', () => {
   if (mainWindow) {
+    mainWindow.show();
+    mainWindow.focus();
+  }
+});
+
+// Only one FlowState at a time: a second launch (e.g. from Spotlight) just focuses the existing window
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+}
+
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
   }

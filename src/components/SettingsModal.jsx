@@ -7,7 +7,7 @@ export default function SettingsModal({
   onSaveSettings, 
   onClose 
 }) {
-  const [doodleHotkey, setDoodleHotkey] = useState(settings.doodleHotkey || 'Option+Space');
+  const [doodleHotkey, setDoodleHotkey] = useState(settings.doodleHotkey || 'Control+Shift+D');
   const [meditationHotkey, setMeditationHotkey] = useState(settings.meditationHotkey || 'Option+M');
   const [pauseHotkey, setPauseHotkey] = useState(settings.pauseHotkey || 'Option+P');
 

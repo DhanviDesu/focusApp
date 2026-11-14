@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Coffee, Wind, Sparkles, Disc, Music, Shuffle, SkipForward } from 'lucide-react';
+import { Coffee, Wind, Sparkles, Disc, Music, Shuffle, SkipForward, Target, Square, Play } from 'lucide-react';
 import { soundEngine } from '../audio/SoundEngine';
+import { dayTotalSeconds, formatHM } from '../utils/storage';
 
 export default function FocusView({ 
   focusSeconds, 
   isPlaying, 
   onStartBreak, 
-  onToggleAudio 
+  onToggleAudio,
+  day,
+  activeSession,
+  onStartSession,
+  onEndSession,
+  onEditGoal
 }) {
+  const [sessionName, setSessionName] = useState('');
   const [selectedPreset, setSelectedPreset] = useState('focus_section_1.m4a');
   const [trackInfo, setTrackInfo] = useState({ title: '', artist: '' });
 
@@ -53,9 +60,73 @@ export default function FocusView({
         <div className="flow-timer-label">Indefinite Flow State</div>
       </div>
 
-      <div style={{ maxWidth: '520px', color: 'var(--text-muted)', fontSize: '14px', lineHeight: '1.5' }}>
-        Focus music playing on an indefinite loop without speech interruptions. Press your shortcut when you need a break.
-      </div>
+      {/* Daily goal countdown — click to edit */}
+      {(() => {
+        const done = dayTotalSeconds(day);
+        const goal = day.goalSeconds;
+        const remaining = goal ? goal - done : 0;
+        return (
+          <button
+            onClick={onEditGoal}
+            title="Edit today's goal"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', textAlign: 'center', padding: 0 }}
+          >
+            {!goal ? (
+              <span style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--accent-cyan)', fontSize: '15px', fontWeight: '600' }}>
+                <Target size={16} /> Set today's goal
+              </span>
+            ) : remaining > 0 ? (
+              <>
+                <div style={{ fontSize: '26px', fontWeight: '700', fontVariantNumeric: 'tabular-nums' }}>
+                  {formatTime(remaining)} left
+                </div>
+                <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                  {formatHM(done)} of {formatHM(goal)} goal today
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: '22px', fontWeight: '700', color: 'var(--accent-emerald)' }}>
+                  Goal reached ✓ {-remaining >= 60 ? `+${formatHM(-remaining)} over` : ''}
+                </div>
+                <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                  {formatHM(done)} of {formatHM(goal)} goal today
+                </div>
+              </>
+            )}
+          </button>
+        );
+      })()}
+
+      {/* Session controls */}
+      {activeSession ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14px' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent-emerald)' }} />
+          <span style={{ fontWeight: '600' }}>{activeSession.name}</span>
+          <span style={{ color: 'var(--text-muted)' }}>{formatHM(activeSession.focusSeconds)}</span>
+          <button className="btn-secondary" onClick={onEndSession} style={{ padding: '6px 12px' }}>
+            <Square size={14} />
+            <span>End session</span>
+          </button>
+        </div>
+      ) : (
+        <form
+          onSubmit={e => { e.preventDefault(); onStartSession(sessionName); setSessionName(''); }}
+          style={{ display: 'flex', alignItems: 'center', gap: '10px' }}
+        >
+          <input
+            type="text"
+            placeholder="What are you working on? (optional)"
+            value={sessionName}
+            onChange={e => setSessionName(e.target.value)}
+            style={{ width: '280px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.08)', border: '1px solid var(--glass-border)', color: '#fff', fontSize: '13px' }}
+          />
+          <button type="submit" className="btn-primary" style={{ padding: '8px 14px' }}>
+            <Play size={14} />
+            <span>Start session</span>
+          </button>
+        </form>
+      )}
 
       <div className="soundscape-selector">
         {presets.map(p => (

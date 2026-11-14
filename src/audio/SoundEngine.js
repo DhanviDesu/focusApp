@@ -270,6 +270,16 @@ class SoundEngine {
     }
   }
 
+  // Continue a paused break where it left off (startBreakSoundscape restarts from 0)
+  resumeBreak(breakType) {
+    this.initContext();
+    this.currentMode = breakType;
+    this.isPlaying = true;
+    const audio = breakType === 'doodle' ? this.doodleAudio : this.meditationAudio;
+    audio.volume = this.volumes.master;
+    audio.play().catch(err => console.warn("Break audio resume deferred:", err));
+  }
+
   getBreakRemainingTime(breakType) {
     const audio = breakType === 'doodle' ? this.doodleAudio : this.meditationAudio;
     if (!audio || !audio.duration || isNaN(audio.duration)) {

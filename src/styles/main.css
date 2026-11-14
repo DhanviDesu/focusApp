@@ -116,6 +116,12 @@ body {
   padding: 0 24px 0 80px; /* Space for Mac traffic lights */
   z-index: 10;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  -webkit-app-region: drag; /* hidden title bar: header acts as the drag handle */
+}
+
+.app-header button,
+.app-header .hotkey-pill {
+  -webkit-app-region: no-drag;
 }
 
 .app-title-group {

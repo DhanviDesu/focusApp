@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import FocusView from './components/FocusView';
 import DoodleScreen from './components/DoodleScreen';
 import MeditationScreen from './components/MeditationScreen';
 import SettingsModal from './components/SettingsModal';
 import StatsModal from './components/StatsModal';
+import GoalModal from './components/GoalModal';
 import { soundEngine } from './audio/SoundEngine';
-import { getSettings, saveSettings, logSession } from './utils/storage';
+import { getSettings, saveSettings, logSession, todayKey, getDay, saveDay, dayTotalSeconds } from './utils/storage';
 
 export default function App() {
   const [mode, setMode] = useState('focus'); // 'focus' | 'doodle' | 'meditate'
@@ -17,6 +18,135 @@ export default function App() {
   const [showMixer, setShowMixer] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [hotkeyStatus, setHotkeyStatus] = useState({});
+
+  // --- Daily goal & sessions ---
+  // Refs hold the source of truth so interval/event callbacks never see stale state;
+  // `day` state mirrors dayRef for rendering.
+  const dayKeyRef = useRef(todayKey());
+  const dayRef = useRef(null);
+  if (dayRef.current === null) {
+    // Sessions left open by a previous run (app quit mid-session) are closed on launch
+    const loaded = getDay(dayKeyRef.current);
+    dayRef.current = {
+      ...loaded,
+      sessions: loaded.sessions.map(s => s.endedAt ? s : { ...s, endedAt: Date.now() })
+    };
+  }
+  const activeIdRef = useRef(null);
+  const [day, setDay] = useState(dayRef.current);
+  const [activeId, setActiveId] = useState(null);
+  const [showGoal, setShowGoal] = useState(dayRef.current.goalSeconds == null);
+
+  const commitDay = (data) => {
+    dayRef.current = data;
+    saveDay(dayKeyRef.current, data);
+    setDay(data);
+  };
+
+  const setActive = (id) => {
+    activeIdRef.current = id;
+    setActiveId(id);
+  };
+
+  const startSession = (name = '') => {
+    const d = dayRef.current;
+    const session = {
+      id: Date.now(),
+      name: name.trim() || `Session ${d.sessions.length + 1}`,
+      startedAt: Date.now(),
+      endedAt: null,
+      focusSeconds: 0
+    };
+    commitDay({ ...d, sessions: [...d.sessions, session] });
+    setActive(session.id);
+  };
+
+  const closeActiveSession = (data) => ({
+    ...data,
+    sessions: data.sessions.map(s => s.id === activeIdRef.current ? { ...s, endedAt: Date.now() } : s)
+  });
+
+  // New calendar day: close the running session in yesterday's log and continue it
+  // in today's, so each day only gets the minutes actually worked in it
+  const checkRollover = () => {
+    const key = todayKey();
+    if (key === dayKeyRef.current) return;
+
+    const old = dayRef.current;
+    const active = old.sessions.find(s => s.id === activeIdRef.current);
+    saveDay(dayKeyRef.current, closeActiveSession(old));
+
+    dayKeyRef.current = key;
+    let fresh = getDay(key);
+    if (active) {
+      const continued = { ...active, id: Date.now(), startedAt: Date.now(), endedAt: null, focusSeconds: 0 };
+      fresh = { ...fresh, sessions: [...fresh.sessions, continued] };
+      setActive(continued.id);
+    }
+    commitDay(fresh);
+    if (fresh.goalSeconds == null) setShowGoal(true);
+  };
+
+  // Called once per second while focusing
+  const tickFocus = () => {
+    checkRollover();
+    if (!activeIdRef.current) startSession();
+
+    const d = dayRef.current;
+    const before = dayTotalSeconds(d);
+    commitDay({
+      ...d,
+      sessions: d.sessions.map(s => s.id === activeIdRef.current ? { ...s, focusSeconds: s.focusSeconds + 1 } : s)
+    });
+
+    if (d.goalSeconds && before < d.goalSeconds && before + 1 >= d.goalSeconds) {
+      soundEngine.playBreakChime();
+    }
+  };
+
+  // Catch midnight even when the app sits idle overnight
+  useEffect(() => {
+    const interval = setInterval(checkRollover, 60 * 1000);
+    window.addEventListener('focus', checkRollover);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', checkRollover);
+    };
+  }, []);
+
+  const handleSaveGoal = (goalSeconds) => {
+    commitDay({ ...dayRef.current, goalSeconds });
+    setShowGoal(false);
+  };
+
+  // Electron starts with built-in defaults; push the saved shortcuts on launch
+  // and track which ones failed to register (taken by another app)
+  useEffect(() => {
+    if (!window.electronAPI) return;
+    const cleanup = window.electronAPI.onHotkeyStatus?.(setHotkeyStatus);
+    window.electronAPI.updateHotkeys?.({
+      doodleHotkey: settings.doodleHotkey,
+      meditationHotkey: settings.meditationHotkey,
+      pauseHotkey: settings.pauseHotkey
+    });
+    return cleanup;
+  }, []);
+
+  // AirPods / media keys: route play & pause through the app's own toggle
+  // so the timer and UI stay in sync (and binaural mode can be paused too)
+  const setPlaybackRef = useRef(null);
+  useEffect(() => {
+    if (!('mediaSession' in navigator)) return;
+    navigator.mediaSession.setActionHandler('play', () => setPlaybackRef.current(true));
+    navigator.mediaSession.setActionHandler('pause', () => setPlaybackRef.current(false));
+  }, []);
+
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    }
+  }, [isPlaying]);
 
   // Auto-return to focus mode when break audio completes
   useEffect(() => {
@@ -31,6 +161,7 @@ export default function App() {
     if (mode === 'focus' && isPlaying) {
       timer = setInterval(() => {
         setFocusSeconds(prev => prev + 1);
+        tickFocus();
       }, 1000);
     }
     return () => {
@@ -118,10 +249,14 @@ export default function App() {
       if (mode === 'focus') {
         soundEngine.startFocusSoundscape();
       } else {
-        soundEngine.startBreakSoundscape();
+        soundEngine.resumeBreak(mode);
       }
       setIsPlaying(true);
     }
+  };
+
+  setPlaybackRef.current = (play) => {
+    if (play !== isPlaying) toggleAudio();
   };
 
   const triggerBreak = (breakType = 'doodle') => {
@@ -157,6 +292,18 @@ export default function App() {
     setMode('focus');
   };
 
+  const handleStartSession = (name) => {
+    startSession(name);
+    if (!isPlaying) toggleAudio();
+  };
+
+  const handleEndSession = () => {
+    commitDay(closeActiveSession(dayRef.current));
+    setActive(null);
+    if (isPlaying) toggleAudio();
+    setFocusSeconds(0);
+  };
+
   const handleSaveSettings = (newSettings) => {
     setSettings(newSettings);
     saveSettings(newSettings);
@@ -177,6 +324,7 @@ export default function App() {
         onOpenStats={() => setShowStats(true)}
         onOpenSettings={() => setShowSettings(true)}
         settings={settings}
+        hotkeyStatus={hotkeyStatus}
       />
 
       <main className="main-viewport">
@@ -186,6 +334,11 @@ export default function App() {
             isPlaying={isPlaying}
             onStartBreak={triggerBreak}
             onToggleAudio={toggleAudio}
+            day={day}
+            activeSession={day.sessions.find(s => s.id === activeId) || null}
+            onStartSession={handleStartSession}
+            onEndSession={handleEndSession}
+            onEditGoal={() => setShowGoal(true)}
           />
         )}
 
@@ -203,6 +356,14 @@ export default function App() {
           settings={settings}
           onSaveSettings={handleSaveSettings}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {showGoal && (
+        <GoalModal
+          goalSeconds={day.goalSeconds}
+          onSave={handleSaveGoal}
+          onClose={() => setShowGoal(false)}
         />
       )}
 

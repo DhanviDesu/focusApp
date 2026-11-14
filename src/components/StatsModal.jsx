@@ -1,9 +1,11 @@
 import React from 'react';
 import { X, BarChart2, Flame, Coffee, Clock } from 'lucide-react';
-import { getStats } from '../utils/storage';
+import { getStats, getDay, todayKey, dayTotalSeconds, formatHM } from '../utils/storage';
 
 export default function StatsModal({ onClose }) {
   const stats = getStats();
+  const today = getDay(todayKey());
+  const todayTotal = dayTotalSeconds(today);
 
   const formatTotalTime = (totalSec) => {
     const hours = Math.floor(totalSec / 3600);
@@ -45,6 +47,46 @@ export default function StatsModal({ onClose }) {
               Mindful Breaks Taken
             </div>
           </div>
+        </div>
+
+        <h3 style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-main)', marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
+          <span>Today's Sessions</span>
+          <span style={{ color: 'var(--text-muted)', fontWeight: '500' }}>
+            {formatHM(todayTotal)}{today.goalSeconds ? ` / ${formatHM(today.goalSeconds)} goal` : ''}
+          </span>
+        </h3>
+
+        {today.goalSeconds ? (
+          <div style={{ height: '6px', borderRadius: '3px', background: 'rgba(255,255,255,0.08)', marginBottom: '12px', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${Math.min(100, (todayTotal / today.goalSeconds) * 100)}%`, background: 'var(--accent-emerald)' }} />
+          </div>
+        ) : null}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
+          {today.sessions.length === 0 ? (
+            <div style={{ color: 'var(--text-dim)', fontSize: '13px', textAlign: 'center', padding: '12px' }}>
+              No sessions yet today.
+            </div>
+          ) : (
+            today.sessions.map(s => (
+              <div
+                key={s.id}
+                style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '10px', background: 'rgba(255, 255, 255, 0.04)', fontSize: '13px' }}
+              >
+                <span>
+                  {s.name}{' '}
+                  <span style={{ color: 'var(--text-dim)' }}>
+                    {new Date(s.startedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                    {s.endedAt ? '' : ' · in progress'}
+                  </span>
+                </span>
+                <span style={{ color: 'var(--text-muted)' }}>
+                  {formatHM(s.focusSeconds)}
+                  {today.goalSeconds ? ` · ${Math.round((s.focusSeconds / today.goalSeconds) * 100)}% of goal` : ''}
+                </span>
+              </div>
+            ))
+          )}
         </div>
 
         <h3 style={{ fontSize: '15px', fontWeight: '600', color: 'var(--text-main)', marginBottom: '12px' }}>

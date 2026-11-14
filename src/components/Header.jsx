@@ -8,7 +8,8 @@ export default function Header({
   onOpenMixer, 
   onOpenStats, 
   onOpenSettings, 
-  settings 
+  settings,
+  hotkeyStatus
 }) {
   return (
     <header className="app-header">
@@ -19,7 +20,7 @@ export default function Header({
         <span className="app-name">FlowState</span>
       </div>
 
-      <HotkeyHintPill settings={settings} onClick={onOpenSettings} />
+      <HotkeyHintPill settings={settings} hotkeyStatus={hotkeyStatus} onClick={onOpenSettings} />
 
       <div className="header-actions">
         <button 

@@ -6,7 +6,7 @@ const KEYS = {
 };
 
 const DEFAULT_SETTINGS = {
-  doodleHotkey: 'Option+Space',
+  doodleHotkey: 'Control+Shift+D',
   meditationHotkey: 'Option+M',
   pauseHotkey: 'Option+P',
   autoChime: true,
@@ -64,4 +64,45 @@ export function logSession(focusSeconds, breakType) {
   try {
     localStorage.setItem(KEYS.STATS, JSON.stringify(stats));
   } catch (e) {}
+}
+
+// Daily goal + sessions, keyed by local date: { 'YYYY-MM-DD': { goalSeconds, sessions: [...] } }
+const DAYS_KEY = 'flowstate_days';
+
+export function todayKey(d = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function getAllDays() {
+  try {
+    return JSON.parse(localStorage.getItem(DAYS_KEY)) || {};
+  } catch (e) {
+    return {};
+  }
+}
+
+export function getDay(key) {
+  return getAllDays()[key] || { goalSeconds: null, sessions: [] };
+}
+
+export function saveDay(key, data) {
+  const all = getAllDays();
+  all[key] = data;
+  try {
+    localStorage.setItem(DAYS_KEY, JSON.stringify(all));
+  } catch (e) {}
+}
+
+export function dayTotalSeconds(day) {
+  return day.sessions.reduce((sum, s) => sum + s.focusSeconds, 0);
+}
+
+// 4h, 1h 46m, 12m
+export function formatHM(totalSec) {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  if (h && m) return `${h}h ${m}m`;
+  if (h) return `${h}h`;
+  return `${m}m`;
 }
